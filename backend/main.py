@@ -2,8 +2,6 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect, File, UploadFile, F
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 import uvicorn
-import cv2
-import mediapipe as mp
 import numpy as np
 import json
 import asyncio
@@ -11,6 +9,22 @@ import base64
 from datetime import datetime
 from typing import Dict, List
 import os
+
+# Optional imports with fallbacks
+try:
+    import cv2
+    CV2_AVAILABLE = True
+except ImportError:
+    CV2_AVAILABLE = False
+    print("OpenCV not available - video processing will be limited")
+
+try:
+    import mediapipe as mp
+    MEDIAPIPE_AVAILABLE = True
+except ImportError:
+    MEDIAPIPE_AVAILABLE = False
+    print("MediaPipe not available - face detection will be limited")
+
 from models.proctoring_session import ProctorSession, DetectionEvent
 from models.object_detector import ObjectDetector
 from models.focus_detector import FocusDetector
