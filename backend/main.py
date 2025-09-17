@@ -225,7 +225,7 @@ async def download_pdf_report(session_id: str):
         media_type="application/pdf",
         filename=f"proctoring_report_{session_id}.pdf"
     )
-
+#get api for sessions
 @app.get("/api/sessions")
 async def get_all_sessions():
     """Get all sessions"""
