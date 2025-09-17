@@ -26,9 +26,15 @@ except ImportError:
     print("MediaPipe not available - face detection will be limited")
 
 from models.proctoring_session import ProctorSession, DetectionEvent
-from models.object_detector import ObjectDetector
-from models.focus_detector import FocusDetector
-from models.report_generator import ReportGenerator
+
+# Use simplified models for deployment
+try:
+    from models.object_detector import ObjectDetector
+    from models.focus_detector import FocusDetector
+    from models.report_generator import ReportGenerator
+except ImportError:
+    print("Using simplified models for deployment")
+    from models_simple import ObjectDetector, FocusDetector, ReportGenerator
 
 app = FastAPI(title="Video Proctoring API", version="1.0.0")
 
@@ -129,6 +135,15 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
             frame_data = json.loads(data)
             
             if frame_data.get("type") == "frame":
+                if not CV2_AVAILABLE:
+                    # Send mock response if CV2 not available
+                    await websocket.send_text(json.dumps({
+                        "type": "events",
+                        "events": [],
+                        "timestamp": datetime.now().isoformat()
+                    }))
+                    continue
+                
                 # Decode base64 frame
                 frame_base64 = frame_data["frame"]
                 frame_bytes = base64.b64decode(frame_base64.split(",")[1])

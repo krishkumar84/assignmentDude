@@ -1,34 +1,58 @@
-import cv2
-import mediapipe as mp
 import numpy as np
 from typing import Dict, Any, Tuple, List
 import math
+
+# Optional imports with fallbacks
+try:
+    import cv2
+    CV2_AVAILABLE = True
+except ImportError:
+    CV2_AVAILABLE = False
+
+try:
+    import mediapipe as mp
+    MEDIAPIPE_AVAILABLE = True
+except ImportError:
+    MEDIAPIPE_AVAILABLE = False
 
 class FocusDetector:
     """Detects if candidate is focused using MediaPipe Face Detection and Pose"""
     
     def __init__(self):
-        # Initialize MediaPipe
-        self.mp_face_detection = mp.solutions.face_detection
-        self.mp_face_mesh = mp.solutions.face_mesh
-        self.mp_pose = mp.solutions.pose
-        self.mp_drawing = mp.solutions.drawing_utils
+        # Initialize variables
+        self.mp_face_detection = None
+        self.mp_face_mesh = None
+        self.mp_pose = None
+        self.mp_drawing = None
+        self.face_detection = None
+        self.face_mesh = None
+        self.pose = None
         
-        # Initialize detectors
-        self.face_detection = self.mp_face_detection.FaceDetection(
-            model_selection=0, 
-            min_detection_confidence=0.5
-        )
-        self.face_mesh = self.mp_face_mesh.FaceMesh(
-            max_num_faces=5,
-            refine_landmarks=True,
-            min_detection_confidence=0.5,
-            min_tracking_confidence=0.5
-        )
-        self.pose = self.mp_pose.Pose(
-            min_detection_confidence=0.5,
-            min_tracking_confidence=0.5
-        )
+        if MEDIAPIPE_AVAILABLE:
+            try:
+                # Initialize MediaPipe
+                self.mp_face_detection = mp.solutions.face_detection
+                self.mp_face_mesh = mp.solutions.face_mesh
+                self.mp_pose = mp.solutions.pose
+                self.mp_drawing = mp.solutions.drawing_utils
+                
+                # Initialize detectors
+                self.face_detection = self.mp_face_detection.FaceDetection(
+                    model_selection=0, 
+                    min_detection_confidence=0.5
+                )
+                self.face_mesh = self.mp_face_mesh.FaceMesh(
+                    max_num_faces=5,
+                    refine_landmarks=True,
+                    min_detection_confidence=0.5,
+                    min_tracking_confidence=0.5
+                )
+                self.pose = self.mp_pose.Pose(
+                    min_detection_confidence=0.5,
+                    min_tracking_confidence=0.5
+                )
+            except Exception as e:
+                print(f"Failed to initialize MediaPipe: {e}")
         
         # Eye aspect ratio threshold for blink detection
         self.EAR_THRESHOLD = 0.25
@@ -51,14 +75,27 @@ class FocusDetector:
             - gaze_data: dict with head pose info
             - eye_closure: bool (bonus feature)
         """
-        rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        
-        # Face detection
-        face_results = self.face_detection.process(rgb_frame)
-        face_mesh_results = self.face_mesh.process(rgb_frame)
-        pose_results = self.pose.process(rgb_frame)
-        
-        result = {
+        # Return default values if dependencies not available
+        if not CV2_AVAILABLE or not MEDIAPIPE_AVAILABLE or self.face_detection is None:
+            return {
+                'face_detected': False,
+                'multiple_faces': False,
+                'face_count': 0,
+                'looking_at_camera': False,
+                'confidence': 0.0,
+                'gaze_data': {},
+                'eye_closure': False
+            }
+            
+        try:
+            rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            
+            # Face detection
+            face_results = self.face_detection.process(rgb_frame)
+            face_mesh_results = self.face_mesh.process(rgb_frame)
+            pose_results = self.pose.process(rgb_frame)
+            
+            result = {
             "face_detected": False,
             "multiple_faces": False,
             "face_count": 0,
@@ -108,7 +145,19 @@ class FocusDetector:
                 result["face_count"] = 1
                 result["confidence"] = nose_landmark.visibility
         
-        return result
+            return result
+            
+        except Exception as e:
+            print(f"Error in focus detection: {e}")
+            return {
+                'face_detected': False,
+                'multiple_faces': False,
+                'face_count': 0,
+                'looking_at_camera': False,
+                'confidence': 0.0,
+                'gaze_data': {},
+                'eye_closure': False
+            }
     
     def _estimate_head_pose(self, landmarks, image_shape) -> Dict[str, float]:
         """Estimate head pose from face landmarks"""

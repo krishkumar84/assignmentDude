@@ -1,23 +1,41 @@
-import cv2
 import numpy as np
-from ultralytics import YOLO
 from typing import List, Dict, Any
-import torch
+
+# Optional imports with fallbacks
+try:
+    import cv2
+    CV2_AVAILABLE = True
+except ImportError:
+    CV2_AVAILABLE = False
+
+try:
+    from ultralytics import YOLO
+    import torch
+    YOLO_AVAILABLE = True
+except ImportError:
+    YOLO_AVAILABLE = False
 
 class ObjectDetector:
     """Detects unauthorized objects using YOLO"""
     
     def __init__(self):
-        # Load YOLOv8 model
-        self.model = YOLO('yolov8n.pt')  # nano version for speed
+        self.model = None
+        self.unauthorized_classes = {}
         
-        # Define unauthorized object classes with multiple phone IDs
-        self.unauthorized_classes = {
-            67: 'phone',      # cell phone
-            77: 'phone',      # mobile phone (alternative ID)
-            84: 'book',       # book
-            # Multiple phone detection IDs for better coverage
-        }
+        if YOLO_AVAILABLE:
+            try:
+                # Load YOLOv8 model
+                self.model = YOLO('yolov8n.pt')  # nano version for speed
+                
+                # Define unauthorized object classes with multiple phone IDs
+                self.unauthorized_classes = {
+                    67: 'phone',      # cell phone
+                    77: 'phone',      # mobile phone (alternative ID)
+                    84: 'book',       # book
+                }
+            except Exception as e:
+                print(f"Failed to load YOLO model: {e}")
+                self.model = None
         
         # Custom class names for books/papers/notes
         self.paper_classes = ['book', 'paper', 'notebook', 'document']
@@ -32,6 +50,48 @@ class ObjectDetector:
         
         Returns:
             List of detected objects with class, confidence, and bbox
+        """
+        if not CV2_AVAILABLE or not YOLO_AVAILABLE or self.model is None:
+            return []  # Return empty list if dependencies not available
+            
+        try:
+            # Run YOLO detection
+            results = self.model(frame)
+            detections = []
+            
+            for result in results:
+                boxes = result.boxes
+                if boxes is not None:
+                    for box in boxes:
+                        # Get class ID and confidence
+                        class_id = int(box.cls[0])
+                        confidence = float(box.conf[0])
+                        
+                        # Check if it's an unauthorized object
+                        if class_id in self.unauthorized_classes:
+                            object_type = self.unauthorized_classes[class_id]
+                            
+                            # Apply different thresholds for different objects
+                            threshold = (self.phone_confidence_threshold 
+                                       if object_type == 'phone' 
+                                       else self.confidence_threshold)
+                            
+                            if confidence >= threshold:
+                                # Get bounding box coordinates
+                                x1, y1, x2, y2 = box.xyxy[0].tolist()
+                                
+                                detection = {
+                                    'class': object_type,
+                                    'confidence': confidence,
+                                    'bbox': [x1, y1, x2, y2]
+                                }
+                                detections.append(detection)
+            
+            return detections
+            
+        except Exception as e:
+            print(f"Error in object detection: {e}")
+            return []
         """
         detections = []
         
